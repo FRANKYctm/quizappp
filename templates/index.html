@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuizApp</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#eef2ff;margin:0;display:flex;justify-content:center;padding:30px}
+  .card{background:#fff;max-width:560px;width:100%;padding:28px;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+  h1{margin-top:0;color:#3730a3}
+  .opt{display:block;padding:12px;margin:8px 0;border:2px solid #c7d2fe;border-radius:8px;cursor:pointer}
+  .opt:hover{background:#eef2ff}
+  .opt input{margin-right:10px}
+  button{background:#4f46e5;color:#fff;border:0;padding:12px 22px;border-radius:8px;font-size:16px;cursor:pointer;margin-top:12px}
+  button:disabled{background:#a5b4fc;cursor:not-allowed}
+  .bar{height:8px;background:#e0e7ff;border-radius:4px;margin-bottom:16px}
+  .bar div{height:8px;background:#4f46e5;border-radius:4px;transition:width .3s}
+  .score{font-size:48px;font-weight:bold;color:#3730a3;text-align:center}
+  .ok{color:#15803d}.bad{color:#b91c1c}
+  li{margin:8px 0}
+</style>
+</head>
+<body>
+<div class="card" id="app">Loading...</div>
+<script>
+let questions = [], current = 0, answers = {};
+const app = document.getElementById("app");
+
+async function start() {
+  const res = await fetch("/api/questions");
+  questions = await res.json();
+  current = 0; answers = {};
+  showQuestion();
+}
+
+function showQuestion() {
+  const q = questions[current];
+  const pct = (current / questions.length) * 100;
+  const isLast = current === questions.length - 1;
+  app.innerHTML = `
+    <h1>QuizApp</h1>
+    <div class="bar"><div style="width:${pct}%"></div></div>
+    <p>Question ${current + 1} of ${questions.length}</p>
+    <h3>${q.text}</h3>
+    ${q.options.map(o => `
+      <label class="opt"><input type="radio" name="opt" value="${o}"
+        ${answers[q.id] === o ? "checked" : ""}>${o}</label>`).join("")}
+    <button id="next" ${answers[q.id] ? "" : "disabled"}>${isLast ? "Submit" : "Next"}</button>`;
+  document.querySelectorAll("input[name=opt]").forEach(r =>
+    r.addEventListener("change", () => {
+      answers[q.id] = r.value;
+      document.getElementById("next").disabled = false;
+    }));
+  document.getElementById("next").onclick = () => isLast ? submitQuiz() : (current++, showQuestion());
+}
+
+async function submitQuiz() {
+  const res = await fetch("/api/submit", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({answers})
+  });
+  showResult(await res.json());
+}
+
+function showResult(r) {
+  app.innerHTML = `
+    <h1>Your Result</h1>
+    <div class="score">${r.score} / ${r.total}</div>
+    <p style="text-align:center">${r.score === r.total ? "Perfect!" : r.score >= r.total / 2 ? "Good job!" : "Keep practising!"}</p>
+    <ul>${r.review.map(x => `
+      <li class="${x.correct ? "ok" : "bad"}">${x.text}<br>
+      Your answer: ${x.your_answer ?? "none"}${x.correct ? " ✔" : ` ✘ (correct: ${x.correct_answer})`}</li>`).join("")}</ul>
+    <button onclick="start()">Try again</button>`;
+}
+start();
+</script>
+</body>
+</html>
